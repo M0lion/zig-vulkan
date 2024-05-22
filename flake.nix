@@ -10,7 +10,9 @@
       in
       {
         devShells.default = pkgs.mkShell {
-          packages = [ pkgs.bashInteractive ];
+          packages = with pkgs; [ 
+						zig
+					];
         };
       });
 }
