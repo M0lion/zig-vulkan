@@ -1,19 +1,43 @@
 const std = @import("std");
+const glfw = @cImport({
+    @cInclude("GLFW/glfw3.h");
+});
+const cStd = @cImport({
+    @cInclude("stdio.h");
+});
+
+export fn glfwErrorCallback(errorCode: c_int, description: [*c]const u8) void {
+    const stdout = std.io.getStdOut().writer();
+    stdout.print("Error {}: {s}\n", .{ errorCode, description }) catch |err| {
+        std.debug.print("Error: {}", .{err});
+    };
+}
 
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    _ = glfw.glfwSetErrorCallback(glfwErrorCallback);
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    const init = glfw.glfwInit();
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
+    if (init == 0) {
+        std.debug.print("Failed to init\n", .{});
+        return;
+    }
 
-    try bw.flush(); // don't forget to flush!
+    const window = glfw.glfwCreateWindow(640, 480, "Test", null, null);
+
+    if (window == null) {
+        glfw.glfwTerminate();
+        std.debug.print("failed to create window\n", .{});
+        return;
+    }
+
+    glfw.glfwMakeContextCurrent(window);
+
+    while (glfw.glfwWindowShouldClose(window) == 0) {
+        glfw.glfwPollEvents();
+    }
+
+    glfw.glfwTerminate();
 }
 
 test "simple test" {
