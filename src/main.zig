@@ -23,6 +23,7 @@ pub fn main() !void {
         return;
     }
 
+    glfw.glfwWindowHint(glfw.GLFW_DECORATED, glfw.GLFW_TRUE);
     const window = glfw.glfwCreateWindow(640, 480, "Test", null, null);
 
     if (window == null) {
@@ -32,8 +33,13 @@ pub fn main() !void {
     }
 
     glfw.glfwMakeContextCurrent(window);
+    glfw.glfwShowWindow(window);
 
+    std.debug.print("Window created\n", .{});
     while (glfw.glfwWindowShouldClose(window) == 0) {
+        glfw.glClear(glfw.GL_COLOR_BUFFER_BIT);
+        glfw.glfwSwapBuffers(window);
+
         glfw.glfwPollEvents();
     }
 

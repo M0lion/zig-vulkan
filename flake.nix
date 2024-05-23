@@ -11,13 +11,13 @@
 					name = "zig-vulkan";
 					src = builtins.path { path = ./.; name = "zig-vulkan"; };
 					version = "0.0.1";
-					buildInputs = with pkgs; [ zig ];
+					buildInputs = with pkgs; [ zig glfw wayland ];
 					buildPhase = ''
-						mkdir -p $out/build
-						cp -r ./* $out/build
-						zig build install --prefix $out
-						mkdir $out/bin
-						cp $out/build/zig-out/bin/* $out/bin
+						zig build
+					'';
+					installPhase = ''
+						mkdir -p $out/bin
+						cp zig-out/bin/zig-vulkan $out/bin/zig-vulkan
 					'';
 				};
       in
@@ -26,8 +26,13 @@
           packages = with pkgs; [ 
 						zig
 						glfw
+						libGL
 						wayland
 					];
+
+					shellHook = ''
+						export LD_LIBRARY_PATH=${pkgs.wayland}/lib:$LD_LIBRARY_PATH
+					'';
         };
 
 				packages.default = zig-vulkan;
