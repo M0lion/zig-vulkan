@@ -1,54 +1,12 @@
 const std = @import("std");
-const glfw = @cImport({
-    @cInclude("GLFW/glfw3.h");
-});
-const cStd = @cImport({
-    @cInclude("stdio.h");
-});
-
-export fn glfwErrorCallback(errorCode: c_int, description: [*c]const u8) void {
-    const stdout = std.io.getStdOut().writer();
-    stdout.print("Error {}: {s}\n", .{ errorCode, description }) catch |err| {
-        std.debug.print("Error: {}", .{err});
-    };
-}
-
+const w = @import("./window.zig");
 pub fn main() !void {
-    _ = glfw.glfwSetErrorCallback(glfwErrorCallback);
+    std.debug.print("Vulkan init success\n", .{});
 
-    const init = glfw.glfwInit();
+    var window = try w.createWindow();
+    defer window.destroy();
 
-    if (init == 0) {
-        std.debug.print("Failed to init\n", .{});
-        return;
+    while (!window.shouldClose) {
+        window.update();
     }
-
-    glfw.glfwWindowHint(glfw.GLFW_DECORATED, glfw.GLFW_TRUE);
-    const window = glfw.glfwCreateWindow(640, 480, "Test", null, null);
-
-    if (window == null) {
-        glfw.glfwTerminate();
-        std.debug.print("failed to create window\n", .{});
-        return;
-    }
-
-    glfw.glfwMakeContextCurrent(window);
-    glfw.glfwShowWindow(window);
-
-    std.debug.print("Window created\n", .{});
-    while (glfw.glfwWindowShouldClose(window) == 0) {
-        glfw.glClear(glfw.GL_COLOR_BUFFER_BIT);
-        glfw.glfwSwapBuffers(window);
-
-        glfw.glfwPollEvents();
-    }
-
-    glfw.glfwTerminate();
-}
-
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
 }

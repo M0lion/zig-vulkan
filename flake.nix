@@ -28,6 +28,10 @@
 						glfw
 						libGL
 						wayland
+						vulkan-tools
+						vulkan-headers
+						vulkan-loader
+						vulkan-validation-layers
 					];
 
 					shellHook = ''
