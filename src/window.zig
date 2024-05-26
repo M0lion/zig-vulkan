@@ -18,21 +18,25 @@ const WindowError = error{
     VulkanInitError,
     VulkanMissingExtensionSupport,
     OutOfMemory,
+    NoPhysicalDevices,
+    NoSuitableDevice,
 };
 
 pub fn createWindow() WindowError!Window {
     const window = try initWindow();
 
-    try initVulkan();
+    const vulkanContext = try initVulkan();
 
     return Window{
         .window = window,
+        .vulkanContext = vulkanContext,
     };
 }
 
 pub const Window = struct {
     window: *glfw.GLFWwindow,
     shouldClose: bool = false,
+    vulkanContext: VulkanContext,
 
     pub fn update(self: *Window) void {
         self.shouldClose = glfw.glfwWindowShouldClose(self.window) == 0;
@@ -44,6 +48,15 @@ pub const Window = struct {
         glfw.glfwDestroyWindow(self.window);
         glfw.glfwTerminate();
     }
+};
+
+pub const VulkanContext = struct {
+    physicalDevice: glfw.VkPhysicalDevice,
+    queueFamilyIndices: QueueFamilyIndices,
+};
+
+pub const QueueFamilyIndices = struct {
+    graphicsFamily: ?c_uint,
 };
 
 export fn glfwErrorCallback(errorCode: c_int, description: [*c]const u8) void {
@@ -71,7 +84,7 @@ fn initWindow() WindowError!*glfw.struct_GLFWwindow {
     return window;
 }
 
-fn initVulkan() WindowError!void {
+fn initVulkan() WindowError!VulkanContext {
     var appInfo = try createVulkanInstance();
     var createInfo = glfw.struct_VkInstanceCreateInfo{
         .sType = glfw.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -89,9 +102,15 @@ fn initVulkan() WindowError!void {
 
     const result: glfw.VkResult = glfw.vkCreateInstance(&createInfo, null, &instance);
 
-    if (result == glfw.VK_SUCCESS) return;
+    if (result != glfw.VK_SUCCESS) return WindowError.VulkanInitError;
 
-    return WindowError.VulkanInitError;
+    const device = try pickPhysicalDevice(instance);
+    const queueFamilyIndices = try findQueueFamiles(device);
+
+    return VulkanContext{
+        .physicalDevice = device,
+        .queueFamilyIndices = queueFamilyIndices,
+    };
 }
 
 fn createVulkanInstance() WindowError!glfw.VkApplicationInfo {
@@ -126,7 +145,6 @@ fn checkValidationLayerSuport() WindowError!bool {
 
         for (properties) |property| {
             const propertyName = std.mem.span(@as([*:0]const u8, @ptrCast(&property.layerName)));
-            std.debug.print("A: {s}, B: {s}\n", .{ property.layerName, layerName });
             if (std.mem.eql(u8, layerName, propertyName)) {
                 found = true;
                 break;
@@ -140,4 +158,57 @@ fn checkValidationLayerSuport() WindowError!bool {
     }
 
     return true;
+}
+
+fn pickPhysicalDevice(instance: glfw.VkInstance) WindowError!glfw.VkPhysicalDevice {
+    var deviceCount: c_uint = 0;
+    _ = glfw.vkEnumeratePhysicalDevices(instance, &deviceCount, null);
+
+    if (deviceCount == 0) {
+        return WindowError.NoPhysicalDevices;
+    }
+
+    const allocator = std.heap.page_allocator;
+    const devices = allocator.alloc(glfw.VkPhysicalDevice, deviceCount) catch return WindowError.OutOfMemory;
+    defer allocator.free(devices);
+
+    _ = glfw.vkEnumeratePhysicalDevices(instance, &deviceCount, devices.ptr);
+
+    for (devices) |device| {
+        if (isSuitableDevice(device)) {
+            return device;
+        }
+    }
+
+    return WindowError.NoSuitableDevice;
+}
+
+fn isSuitableDevice(_: glfw.VkPhysicalDevice) bool {
+    return true;
+}
+
+fn findQueueFamiles(device: glfw.VkPhysicalDevice) WindowError!QueueFamilyIndices {
+    var queueFamilyCount: c_uint = 0;
+    _ = glfw.vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, null);
+
+    const allocator = std.heap.page_allocator;
+    const families = allocator.alloc(glfw.VkQueueFamilyProperties, queueFamilyCount) catch return WindowError.OutOfMemory;
+    defer allocator.free(families);
+
+    _ = glfw.vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, families.ptr);
+
+    var indices = QueueFamilyIndices{
+        .graphicsFamily = null,
+    };
+
+    var i: c_uint = 0;
+    for (families) |family| {
+        if (family.queueFlags & glfw.VK_QUEUE_GRAPHICS_BIT > 0) {
+            indices.graphicsFamily = i;
+        }
+
+        i += 1;
+    }
+
+    return indices;
 }
