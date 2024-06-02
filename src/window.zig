@@ -8,7 +8,7 @@ const cStd = @cImport({
     @cInclude("stdio.h");
 });
 
-const validationLayers = [_][]const u8{
+const validationLayers: []const []const u8 = &[_][]const u8{
     "VK_LAYER_KHRONOS_validation",
 };
 
@@ -20,18 +20,9 @@ const WindowError = error{
     OutOfMemory,
     NoPhysicalDevices,
     NoSuitableDevice,
+    NoGraphicsQueue,
+    CreateLogicalDeviceError,
 };
-
-pub fn createWindow() WindowError!Window {
-    const window = try initWindow();
-
-    const vulkanContext = try initVulkan();
-
-    return Window{
-        .window = window,
-        .vulkanContext = vulkanContext,
-    };
-}
 
 pub const Window = struct {
     window: *glfw.GLFWwindow,
@@ -45,15 +36,33 @@ pub const Window = struct {
     }
 
     pub fn destroy(self: Window) void {
+        self.vulkanContext.destroy();
         glfw.glfwDestroyWindow(self.window);
         glfw.glfwTerminate();
     }
 };
 
 pub const VulkanContext = struct {
+    instance: glfw.VkInstance,
     physicalDevice: glfw.VkPhysicalDevice,
-    queueFamilyIndices: QueueFamilyIndices,
+    device: glfw.VkDevice,
+
+    fn destroy(self: VulkanContext) void {
+        glfw.vkDestroyDevice(self.device, null);
+        glfw.vkDestroyInstance(self.instance, null);
+    }
 };
+
+pub fn createWindow() WindowError!Window {
+    const window = try initWindow();
+
+    const vulkanContext = try initVulkan();
+
+    return Window{
+        .window = window,
+        .vulkanContext = vulkanContext,
+    };
+}
 
 pub const QueueFamilyIndices = struct {
     graphicsFamily: ?c_uint,
@@ -104,12 +113,13 @@ fn initVulkan() WindowError!VulkanContext {
 
     if (result != glfw.VK_SUCCESS) return WindowError.VulkanInitError;
 
-    const device = try pickPhysicalDevice(instance);
-    const queueFamilyIndices = try findQueueFamiles(device);
+    const physicalDevice = try pickPhysicalDevice(instance);
+    const device = try createLogicalDevice(physicalDevice);
 
     return VulkanContext{
-        .physicalDevice = device,
-        .queueFamilyIndices = queueFamilyIndices,
+        .instance = instance,
+        .physicalDevice = physicalDevice,
+        .device = device,
     };
 }
 
@@ -211,4 +221,36 @@ fn findQueueFamiles(device: glfw.VkPhysicalDevice) WindowError!QueueFamilyIndice
     }
 
     return indices;
+}
+
+fn createLogicalDevice(physicalDevice: glfw.VkPhysicalDevice) WindowError!glfw.VkDevice {
+    const indices = try findQueueFamiles(physicalDevice);
+
+    var queuePriority: f32 = 1.0;
+    const queueCreateInfo = glfw.VkDeviceQueueCreateInfo{
+        .sType = glfw.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueFamilyIndex = indices.graphicsFamily orelse return WindowError.NoGraphicsQueue,
+        .queueCount = 1,
+        .pQueuePriorities = &queuePriority,
+    };
+
+    const deviceFeatures = glfw.VkPhysicalDeviceFeatures{};
+
+    const createInfo = glfw.VkDeviceCreateInfo{
+        .sType = glfw.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pQueueCreateInfos = &queueCreateInfo,
+        .queueCreateInfoCount = 1,
+        .pEnabledFeatures = &deviceFeatures,
+        .enabledExtensionCount = 0,
+        .enabledLayerCount = validationLayers.len,
+        .ppEnabledLayerNames = @ptrCast(validationLayers.ptr),
+    };
+
+    const allocator = std.heap.page_allocator;
+    const device = allocator.alloc(glfw.VkDevice, 1) catch return WindowError.OutOfMemory;
+    const result = glfw.vkCreateDevice(physicalDevice, &createInfo, null, device.ptr);
+
+    if (result != glfw.VK_SUCCESS) return WindowError.CreateLogicalDeviceError;
+
+    return device[0];
 }
